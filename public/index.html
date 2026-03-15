@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交互式答题系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px 0;
+        }
+        .quiz-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        .quiz-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f8f9ff;
+        }
+        .upload-area:hover {
+            background: #eef0ff;
+            border-color: #764ba2;
+        }
+        .upload-area.dragover {
+            background: #e8eaff;
+            border-color: #764ba2;
+            transform: scale(1.02);
+        }
+        .question-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border-left: 5px solid #667eea;
+        }
+        .question-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+        }
+        .option-label {
+            display: block;
+            padding: 12px 20px;
+            margin: 8px 0;
+            background: #f8f9fa;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .option-label:hover {
+            background: #eef0ff;
+            transform: translateX(10px);
+        }
+        .option-label input {
+            margin-right: 10px;
+        }
+        .option-label.selected {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-submit {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            padding: 15px 50px;
+            font-size: 1.2rem;
+            border-radius: 30px;
+            transition: all 0.3s;
+        }
+        .btn-submit:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        .score-display {
+            text-align: center;
+            padding: 40px;
+        }
+        .score-number {
+            font-size: 4rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+        }
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="quiz-card">
+            <div class="quiz-header">
+                <h1>📚 交互式答题系统</h1>
+                <p class="mb-0">上传试卷，自动解析，开始答题</p>
+            </div>
+
+            <!-- 上传区域 -->
+            <div id="uploadSection" class="p-5">
+                <div class="upload-area" id="uploadArea">
+                    <input type="file" id="fileInput" accept=".pdf,.doc,.docx" style="display: none;">
+                    <div class="mb-4">
+                        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#667eea" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                    </div>
+                    <h4>点击或拖拽上传试卷</h4>
+                    <p class="text-muted">支持 PDF、Word 格式</p>
+                </div>
+                <div id="uploadProgress" class="loading d-none">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-3">正在解析试卷，请稍候...</p>
+                </div>
+            </div>
+
+            <!-- 答题区域 -->
+            <div id="quizSection" class="p-5 d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3>📋 试卷题目</h3>
+                    <span id="questionCount" class="badge bg-primary">0/0</span>
+                </div>
+                <div id="questionsContainer"></div>
+                <div class="text-center mt-5">
+                    <button class="btn btn-submit" onclick="submitAnswers()">提交答案</button>
+                </div>
+            </div>
+
+            <!-- 成绩区域 -->
+            <div id="scoreSection" class="p-5 d-none">
+                <div class="score-display">
+                    <h3>🎉 答题完成！</h3>
+                    <div class="score-number" id="scoreNumber">0</div>
+                    <p class="text-muted">总分</p>
+                    <button class="btn btn-outline-primary mt-4" onclick="restartQuiz()">重新开始</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let questions = [];
+        let answers = {};
+
+        // 拖拽上传
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // 处理文件上传
+        async function handleFile(file) {
+            const uploadProgress = document.getElementById('uploadProgress');
+            uploadProgress.classList.remove('d-none');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('api/upload.php', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    questions = result.questions;
+                    displayQuiz();
+                } else {
+                    alert('试卷解析失败：' + result.message);
+                }
+            } catch (error) {
+                alert('上传失败：' + error.message);
+            } finally {
+                uploadProgress.classList.add('d-none');
+            }
+        }
+
+        // 显示答题界面
+        function displayQuiz() {
+            document.getElementById('uploadSection').classList.add('d-none');
+            document.getElementById('quizSection').classList.remove('d-none');
+
+            const container = document.getElementById('questionsContainer');
+            container.innerHTML = '';
+
+            questions.forEach((q, index) => {
+                const card = document.createElement('div');
+                card.className = 'question-card';
+                card.id = `question-${index}`;
+
+                let optionsHtml = '';
+                if (q.options && q.options.length > 0) {
+                    q.options.forEach((option, optIndex) => {
+                        optionsHtml += `
+                            <label class="option-label" onclick="selectOption(this, ${index}, '${String.fromCharCode(65 + optIndex)}')">
+                                <input type="radio" name="question-${index}" value="${String.fromCharCode(65 + optIndex)}">
+                                ${String.fromCharCode(65 + optIndex)}. ${option}
+                            </label>
+                        `;
+                    });
+                }
+
+                card.innerHTML = `
+                    <div class="question-title">
+                        <span class="badge bg-light text-dark me-2">${index + 1}.</span>
+                        ${q.title}
+                    </div>
+                    ${optionsHtml}
+                `;
+
+                container.appendChild(card);
+            });
+
+            document.getElementById('questionCount').textContent = `0/${questions.length}`;
+        }
+
+        // 选择选项
+        function selectOption(label, questionIndex, option) {
+            // 移除其他选项的选中状态
+            const allOptions = label.parentElement.querySelectorAll('.option-label');
+            allOptions.forEach(opt => opt.classList.remove('selected'));
+
+            // 添加当前选项选中状态
+            label.classList.add('selected');
+            label.querySelector('input').checked = true;
+
+            // 保存答案
+            answers[questionIndex] = option;
+            document.getElementById('questionCount').textContent = `${Object.keys(answers).length}/${questions.length}`;
+        }
+
+        // 提交答案
+        function submitAnswers() {
+            if (Object.keys(answers).length < questions.length) {
+                if (!confirm(`还有 ${questions.length - Object.keys(answers).length} 道题未作答，确定要提交吗？`)) {
+                    return;
+                }
+            }
+
+            let score = 0;
+            questions.forEach((q, index) => {
+                const questionCard = document.getElementById(`question-${index}`);
+                const userAnswer = answers[index];
+
+                if (userAnswer === q.answer) {
+                    score++;
+                    questionCard.style.borderLeftColor = '#28a745';
+                } else {
+                    questionCard.style.borderLeftColor = '#dc3545';
+                    if (q.answer) {
+                        questionCard.innerHTML += `
+                            <div class="mt-3 p-3 bg-light rounded">
+                                <small class="text-muted">正确答案：${q.answer}</small>
+                            </div>
+                        `;
+                    }
+                }
+            });
+
+            // 显示成绩
+            const percentage = Math.round((score / questions.length) * 100);
+            document.getElementById('scoreNumber').textContent = `${score}/${questions.length} (${percentage}%)`;
+            document.getElementById('scoreNumber').style.fontSize = `${2 + percentage / 20}rem`;
+
+            document.getElementById('quizSection').classList.add('d-none');
+            document.getElementById('scoreSection').classList.remove('d-none');
+        }
+
+        // 重新开始
+        function restartQuiz() {
+            questions = [];
+            answers = {};
+            document.getElementById('quizSection').classList.add('d-none');
+            document.getElementById('scoreSection').classList.add('d-none');
+            document.getElementById('uploadSection').classList.remove('d-none');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自动上传测试</title>
+</head>
+<body>
+    <h2>自动上传测试</h2>
+    <button onclick="uploadFile()">上传试卷</button>
+    
+    <script>
+        async function uploadFile() {
+            const formData = new FormData();
+            formData.append('file', '期末综合检测卷_B.pdf');
+            
+            try {
+                const response = await fetch('api/upload.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                console.log('上传结果:', result);
+                alert('上传完成！请查看控制台');
+            } catch (error) {
+                console.error('上传失败:', error);
+                alert('上传失败：' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
